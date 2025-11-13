@@ -1142,7 +1142,12 @@ MiniFiles.set_bookmark = function(id, path, opts)
   opts = opts or {}
   if not (opts.desc == nil or type(opts.desc) == 'string') then H.error('Bookmark description should be string') end
 
-  explorer.bookmarks[id] = { path = path, desc = opts.desc }
+  H.bookmarks[id] = { path = path, desc = opts.desc }
+end
+
+--- Clear all bookmarks
+MiniFiles.clear_bookmarks = function()
+  H.bookmarks = {}
 end
 
 --- Get latest used anchor path
@@ -1235,6 +1240,9 @@ H.ns_id = {
 H.timers = {
   focus = vim.loop.new_timer(),
 }
+
+-- Make bookmarks persist for nvim session
+H.bookmarks = {}
 
 -- Index of all visited files
 H.path_index = {}
@@ -2120,6 +2128,32 @@ H.buffer_create = function(path, mappings)
   return buf_id
 end
 
+H.mark_goto = function(id)
+  if id == nil then
+    id = H.getcharstr()
+  end
+  if id == nil then
+    return
+  end
+  local data = H.bookmarks[id]
+  if data == nil then
+    return H.notify("No bookmark with id " .. vim.inspect(id), "WARN")
+  end
+
+  local path = data.path
+  if vim.is_callable(path) then
+    path = path()
+  end
+  local is_valid_path = type(path) == "string" and H.fs_get_type(vim.fn.expand(path)) == "directory"
+  if not is_valid_path then
+    return H.notify("Bookmark path should be a valid path to directory", "WARN")
+  end
+
+  local state = MiniFiles.get_explorer_state()
+  MiniFiles.set_bookmark("'", state.branch[state.depth_focus], { desc = "Before latest jump" })
+  MiniFiles.set_branch({ path })
+end
+
 H.buffer_make_mappings = function(buf_id, mappings)
   local go_in_with_count = function()
     for _ = 1, vim.v.count1 do
@@ -2161,22 +2195,6 @@ H.buffer_make_mappings = function(buf_id, mappings)
     return [[<C-\><C-n>]]
   end
 
-  local mark_goto = function()
-    local id = H.getcharstr()
-    if id == nil then return end
-    local data = MiniFiles.get_explorer_state().bookmarks[id]
-    if data == nil then return H.notify('No bookmark with id ' .. vim.inspect(id), 'WARN') end
-
-    local path = data.path
-    if vim.is_callable(path) then path = path() end
-    local is_valid_path = type(path) == 'string' and H.fs_get_type(vim.fn.expand(path)) == 'directory'
-    if not is_valid_path then return H.notify('Bookmark path should be a valid path to directory', 'WARN') end
-
-    local state = MiniFiles.get_explorer_state()
-    MiniFiles.set_bookmark("'", state.branch[state.depth_focus], { desc = 'Before latest jump' })
-    MiniFiles.set_branch({ path })
-  end
-
   local mark_set = function()
     local id = H.getcharstr()
     if id == nil then return end
@@ -2196,8 +2214,8 @@ H.buffer_make_mappings = function(buf_id, mappings)
   buf_map('n', mappings.go_in_plus,  go_in_plus,            'Go in entry plus')
   buf_map('n', mappings.go_out,      go_out_with_count,     'Go out of directory')
   buf_map('n', mappings.go_out_plus, go_out_plus,           'Go out of directory plus')
-  buf_map('n', mappings.mark_goto,   mark_goto,             'Go to bookmark')
   buf_map('n', mappings.mark_set,    mark_set,              'Set bookmark')
+  buf_map('n', mappings.mark_goto,   MiniFiles.mark_goto,   'Go to bookmark')
   buf_map('n', mappings.reset,       MiniFiles.reset,       'Reset')
   buf_map('n', mappings.reveal_cwd,  MiniFiles.reveal_cwd,  'Reveal cwd')
   buf_map('n', mappings.show_help,   MiniFiles.show_help,   'Show Help')
@@ -2921,4 +2939,5 @@ H.sanitize_string = function(x) return ((x or ''):gsub('\n', '<NL>'):gsub('%z', 
 -- TODO: Remove after compatibility with Neovim=0.9 is dropped
 H.islist = vim.fn.has('nvim-0.10') == 1 and vim.islist or vim.tbl_islist
 
+MiniFiles.goto_mark = H.mark_goto
 return MiniFiles
