@@ -694,8 +694,10 @@ MiniFiles.config = {
   windows = {
     -- Maximum number of windows to show side by side
     max_number = math.huge,
-    -- Whether to show preview of file/directory under cursor
-    preview = false,
+    -- Whether to show preview of directory under cursor
+    preview_folder = false,
+    -- Whether to show preview of file under cursor
+    preview_file = false,
     -- Width of focused window
     width_focus = 50,
     -- Width of non-focused window
@@ -1295,6 +1297,8 @@ H.setup_config = function(config)
   H.check_type('windows.width_focus', config.windows.width_focus, 'number')
   H.check_type('windows.width_nofocus', config.windows.width_nofocus, 'number')
   H.check_type('windows.width_preview', config.windows.width_preview, 'number')
+  H.check_type("windows.preview_folder", config.windows.preview_folder, "boolean")
+  H.check_type("windows.preview_file", config.windows.preview_file, "boolean")
 
   return config
 end
@@ -1582,9 +1586,15 @@ H.explorer_sync_cursor_and_branch = function(explorer, depth)
   explorer.depth_focus = math.min(explorer.depth_focus, #explorer.branch)
 
   -- Show preview to the right of current buffer if needed
-  local show_preview = explorer.opts.windows.preview
+  local show_folder_preview = explorer.opts.windows.preview_folder
+  local show_file_preview = explorer.opts.windows.preview_file
   local is_cur_buf = explorer.depth_focus == depth
-  if show_preview and is_cur_buf then table.insert(explorer.branch, cursor_path) end
+  if is_cur_buf then
+    local is_dir = vim.fn.isdirectory(cursor_path) == 1
+    if (show_folder_preview and is_dir) or (show_file_preview and not is_dir) then
+      table.insert(explorer.branch, cursor_path)
+    end
+  end
 
   return explorer
 end
