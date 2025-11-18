@@ -645,11 +645,14 @@ end
 --- simultaneously. For example, use value 1 to always show single window.
 --- There is no constraint by default.
 ---
---- `windows.preview` is a boolean indicating whether to show preview of
---- file/directory under cursor. Notes:
+--- `windows.preview_file` is a boolean indicating whether to default show preview of
+--- file under cursor. Notes:
 --- - It is always shown, even if current line is for not yet existing path.
 --- - File preview is highlighted if its size is small enough (less than 1K
 ---   bytes per line or 1M bytes in total).
+---
+--- `windows.preview_folder` is a boolean indicating whether to default show preview of
+--- folder under cursor. Notes:
 ---
 --- `windows.width_focus` and `windows.width_nofocus` are number of columns used
 --- as `width` for focused and non-focused windows respectively.
@@ -1301,13 +1304,11 @@ H.setup_config = function(config)
 
   H.check_type('windows', config.windows, 'table')
   H.check_type('windows.max_number', config.windows.max_number, 'number')
-  H.check_type('windows.preview', config.windows.preview, 'boolean')
   H.check_type('windows.width_focus', config.windows.width_focus, 'number')
   H.check_type('windows.width_nofocus', config.windows.width_nofocus, 'number')
   H.check_type('windows.width_preview', config.windows.width_preview, 'number')
   H.check_type("windows.preview_folder", config.windows.preview_folder, "boolean")
   H.check_type("windows.preview_file", config.windows.preview_file, "boolean")
-
   return config
 end
 
@@ -1417,6 +1418,10 @@ H.explorer_new = function(path)
     anchor = path,
     target_window = vim.api.nvim_get_current_win(),
     bookmarks = {},
+    toggles = {
+      preview_folder = MiniFiles.config.windows.preview_folder,
+      preview_file = MiniFiles.config.windows.preview_file,
+    },
     opts = {},
   }
 end
@@ -1594,12 +1599,10 @@ H.explorer_sync_cursor_and_branch = function(explorer, depth)
   explorer.depth_focus = math.min(explorer.depth_focus, #explorer.branch)
 
   -- Show preview to the right of current buffer if needed
-  local show_folder_preview = explorer.opts.windows.preview_folder
-  local show_file_preview = explorer.opts.windows.preview_file
   local is_cur_buf = explorer.depth_focus == depth
-  if is_cur_buf then
+  if is_cur_buf and cursor_path:find('\0') == nil then
     local is_dir = vim.fn.isdirectory(cursor_path) == 1
-    if (show_folder_preview and is_dir) or (show_file_preview and not is_dir) then
+    if (explorer.toggles.preview_folder and is_dir) or (explorer.toggles.preview_file and not is_dir) then
       table.insert(explorer.branch, cursor_path)
     end
   end
@@ -1749,7 +1752,7 @@ H.explorer_refresh_depth_window = function(explorer, depth, win_count, win_col)
 
   -- Compute width based on window role
   local win_is_focused = depth == explorer.depth_focus
-  local win_is_preview = opts.windows.preview and (depth == (explorer.depth_focus + 1))
+  local win_is_preview = (explorer.toggles.preview_folder and explorer.toggles.preview_file) and (depth == (explorer.depth_focus + 1))
   local cur_width = win_is_focused and opts.windows.width_focus
     or (win_is_preview and opts.windows.width_preview or opts.windows.width_nofocus)
 
@@ -1942,7 +1945,7 @@ H.compute_visible_depth_range = function(explorer, opts)
   -- Add 2 to widths to take into account width of left and right borders
   local width_focus, width_nofocus = opts.windows.width_focus + 2, opts.windows.width_nofocus + 2
 
-  local has_preview = explorer.opts.windows.preview and explorer.depth_focus < #explorer.branch
+  local has_preview = (explorer.toggles.preview_folder and explorer.toggles.preview_file) and explorer.depth_focus < #explorer.branch
   local width_preview = has_preview and (opts.windows.width_preview + 2) or width_nofocus
 
   local max_number = 1
@@ -2940,4 +2943,29 @@ H.sanitize_string = function(x) return ((x or ''):gsub('\n', '<NL>'):gsub('%z', 
 H.islist = vim.fn.has('nvim-0.10') == 1 and vim.islist or vim.tbl_islist
 
 MiniFiles.goto_mark = H.mark_goto
+
+--- Toggles file preview flag
+---@return boolean New value of file preview flag
+function MiniFiles.toggle_preview_file()
+  local explorer = H.explorer_get()
+  if explorer == nil then
+    return MiniFiles.config.windows.preview_file
+  end
+
+  explorer.toggles.preview_file = not explorer.toggles.preview_file
+  return explorer.toggles.preview_file
+end
+
+--- Toggles folder preview flag
+---@return boolean New value of folder preview flag
+function MiniFiles.toggle_preview_folder()
+  local explorer = H.explorer_get()
+  if explorer == nil then
+    return MiniFiles.config.windows.preview_folder
+  end
+
+  explorer.toggles.preview_folder = not explorer.toggles.preview_folder
+  return explorer.toggles.preview_folder
+end
+
 return MiniFiles
