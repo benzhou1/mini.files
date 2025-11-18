@@ -691,6 +691,8 @@ MiniFiles.config = {
     permanent_delete = true,
     -- Whether to use for editing directories
     use_as_default_explorer = true,
+    -- Whether to allow writing buffer and synchronizing on each write
+    sync_on_save = false,
   },
 
   -- Customization of explorer windows
@@ -1301,6 +1303,7 @@ H.setup_config = function(config)
   H.check_type('options', config.options, 'table')
   H.check_type('options.use_as_default_explorer', config.options.use_as_default_explorer, 'boolean')
   H.check_type('options.permanent_delete', config.options.permanent_delete, 'boolean')
+  H.check_type('options.sync_on_save', config.options.sync_on_save, 'boolean')
 
   H.check_type('windows', config.windows, 'table')
   H.check_type('windows.max_number', config.windows.max_number, 'number')
@@ -2098,7 +2101,12 @@ end
 -- Buffers --------------------------------------------------------------------
 H.buffer_create = function(path, mappings)
   -- Create buffer
-  local buf_id = vim.api.nvim_create_buf(false, true)
+  local scratch = true
+  if MiniFiles.config.options.sync_on_save then
+    scratch = false
+  end
+
+  local buf_id = vim.api.nvim_create_buf(false, scratch)
   H.set_buf_name(buf_id, path)
 
   -- Register buffer
@@ -2121,6 +2129,12 @@ H.buffer_create = function(path, mappings)
 
   au({ 'CursorMoved', 'CursorMovedI', 'TextChangedP' }, 'Tweak cursor position', H.view_track_cursor)
   au({ 'TextChanged', 'TextChangedI', 'TextChangedP' }, 'Track buffer modification', H.view_track_text_change)
+
+  if MiniFiles.config.options.sync_on_save then
+    au({ "BufWritePre", }, 'Sync on save', function(e)
+      MiniFiles.synchronize()
+    end)
+  end
 
   -- Tweak buffer to be used nicely with other 'mini.nvim' modules
   vim.b[buf_id].minicursorword_disable = true
